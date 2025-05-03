@@ -49,7 +49,7 @@ with left:
             st.session_state.pop("title_area", None)
             st.rerun()
 
-    st.markdown("<p style='font-size: 0.9em; color: grey;'>一部にOCR認識によるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 0.9em; color: grey;'>一部にOCRによるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
 
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
