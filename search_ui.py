@@ -23,28 +23,33 @@ st.markdown(f"""
 
 left, right = st.columns([1, 3])
 
+if "keyword_area" not in st.session_state:
+    st.session_state["keyword_area"] = ""
+if "title_area" not in st.session_state:
+    st.session_state["title_area"] = ""
+if "search" not in st.session_state:
+    st.session_state["search"] = False
+if "page" not in st.session_state:
+    st.session_state["page"] = 1
+
 with left:
     keywords = st.text_area("理由本文（スペースで区切るとAND検索します）", key="keyword_area")
     title_kw = st.text_input("法案名で検索（キーワード部分一致）", key="title_area")
 
-    if st.button("検索"):
-        st.session_state['search'] = True
-        st.session_state['page'] = 1
+    col1_, col2_ = st.columns([1, 1])
+    with col1_:
+        if st.button("検索"):
+            st.session_state['search'] = True
+            st.session_state['page'] = 1
+    with col2_:
+        if st.button("クリア"):
+            st.session_state['search'] = False
+            st.session_state['page'] = 1
+            st.session_state.pop("keyword_area", None)
+            st.session_state.pop("title_area", None)
+            st.rerun()
 
-    if st.button("クリア"):
-        keywords = ""
-        title_kw = ""
-        st.session_state['search'] = False
-        st.session_state['page'] = 1
-
-    if st.button("検索結果を出力"):
-        if 'filtered_df_all' in st.session_state:
-            st.download_button(
-                "検索結果をCSVでダウンロード",
-                st.session_state['filtered_df_all'].to_csv(index=False).encode("utf-8"),
-                file_name="search_results.csv",
-                mime="text/csv"
-            )
+    st.markdown("<p style='font-size: 0.9em; color: grey;'>一部にOCR認識によるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
 
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -65,12 +70,13 @@ with right:
     if st.session_state.get('search', False):
         df = pd.DataFrame(data)
 
-        keywords_list = keywords.strip().split() if keywords else []
+        keywords_list = st.session_state.get("keyword_area", "").strip().split()
         for kw in keywords_list:
             df = df[df["reason"].str.contains(kw, case=False, na=False)]
 
-        if title_kw:
-            df = df[df["title"].str.contains(title_kw, case=False, na=False)]
+        title_kw_val = st.session_state.get("title_area", "")
+        if title_kw_val:
+            df = df[df["title"].str.contains(title_kw_val, case=False, na=False)]
 
         result_count = len(df)
         st.write(f"該当件数：{result_count} 件")
@@ -93,7 +99,7 @@ with right:
             return text
 
         display_df["理由"] = display_df["reason"].apply(lambda x: highlight_text(x, keywords_list, "#8B0000"))
-        display_df["法案名"] = display_df["title"].apply(lambda x: highlight_text(x, [title_kw] if title_kw else [], "#006400"))
+        display_df["法案名"] = display_df["title"].apply(lambda x: highlight_text(x, [title_kw_val] if title_kw_val else [], "#006400"))
 
         html = """
         <style>
