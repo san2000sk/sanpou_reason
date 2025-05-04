@@ -17,7 +17,7 @@ data = load_data()
 st.markdown(f"""
 <div style='display: flex; justify-content: space-between; align-items: center; background-color:#6a5acd; padding: 0.3em;'>
   <h1 style='color:white; font-size:1.5em; margin: 0;'>理由検索</h1>
-  <p style='color:white; font-size:0.9em; margin: 0;'>第132回国会（平成７年常会）以降の参法（{len(data)}件）から理由を検索できます。</p>
+  <p style='color:white; font-size:0.9em; margin: 0;'>平成年間以降（第114回国会以降）の参法（{len(data)}件）から理由を検索できます。</p>
 </div>
 """, unsafe_allow_html=True)
 
