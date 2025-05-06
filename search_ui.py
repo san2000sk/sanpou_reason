@@ -159,12 +159,13 @@ with right:
         for _, row in display_df.iterrows():
             round_number, number_raw = row['filename'].replace(".pdf", "").split("-")
             number_int = str(int(number_raw))
+            pdf_url = f"https://houseikyoku.sangiin.go.jp/sanhouichiran/sanhoudata/{round_number}/{round_number}-{number_int.zfill(3)}.pdf"
             html += f"""
             <tr>
               <td class='centered'>{round_number}</td>
               <td class='centered'>{number_int}</td>
               <td class='centered'>{row['submitted_date']}</td>
-              <td class='title-align'>{row['法案名']}</td>
+              <td class='title-align'><a href="{pdf_url}" target="_blank" style="color: #1f77b4; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">{row['法案名']}</a></td>
               <td class='justify'>{row['理由']}</td>
             </tr>
             """
