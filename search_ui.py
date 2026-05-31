@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 # ページ設定
-st.set_page_config(layout="wide", page_title="法案理由検索ツール")
+st.set_page_config(layout="wide", page_title="参法理由検索ツール")
 
 # カスタムCSS
 st.markdown("""
@@ -50,18 +50,25 @@ def load_data():
 
 data = load_data()
 
-# 数字を全角に変換
+# 数字を全角に変換する関数
 def to_full_width(n):
     s = str(n)
     trans = str.maketrans("0123456789", "０１２３４５６７８９")
     return s.translate(trans)
+
+# 条件に応じた数字変換（一桁なら全角、二桁以上なら半角）
+def smart_number_format(n_str):
+    if len(n_str) == 1:
+        return to_full_width(n_str)
+    return n_str
 
 # 日付フォーマット変換
 def format_date(date_str):
     era_map = {"平": "平成", "令": "令和"}
     era = era_map.get(date_str[0], date_str[0])
     parts = date_str[1:].split(".")
-    formatted_parts = [to_full_width(p) if len(p) == 1 else p for p in parts]
+    # 一桁なら全角、二桁なら半角
+    formatted_parts = [smart_number_format(p) for p in parts]
     if len(formatted_parts) == 3:
         return f"{era}{formatted_parts[0]}年{formatted_parts[1]}月{formatted_parts[2]}日"
     return date_str
@@ -89,11 +96,11 @@ left, right = st.columns([1, 3])
 with left:
     keywords = st.text_area("理由本文（スペース区切りでAND検索）", key="keyword_area", height=100)
     exclude_kw = st.text_input("除外キーワード", key="exclude_area")
-    title_kw = st.text_input("法案名で検索（キーワード部分一致）", key="title_area")
+    title_kw = st.text_input("法案名で検索", key="title_area")
     
     st.markdown("<div style='margin-top: 0.5em;'></div>", unsafe_allow_html=True)
-    use_prox = st.checkbox("順序・字数検索を利用する", key="use_proximity")
-    prox_dist = st.number_input("字数入力欄", min_value=0, value=st.session_state["proximity_dist"], 
+    use_prox = st.checkbox("出現順序・間隔検索を利用する", key="use_proximity")
+    prox_dist = st.number_input("出現間隔入力欄", min_value=0, value=st.session_state["proximity_dist"], 
                                 disabled=not use_prox, key="proximity_dist_input")
     if use_prox: st.session_state["proximity_dist"] = prox_dist
 
@@ -188,11 +195,14 @@ with right:
                     for label in selected_labels:
                         row = id_to_row[label]
                         parts = row['filename'].replace(".pdf", "").split("-")
-                        num_full = to_full_width(int(parts[1]))
-                        output_text += f"◯{row['title']}（第{parts[0]}回国会参法第{num_full}号・{format_date(row['submitted_date'])}提出）\n"
+                        round_num = parts[0]
+                        num_raw = str(int(parts[1]))
+                        # 提出番号も「一桁なら全角、二桁なら半角」
+                        num_formatted = smart_number_format(num_raw)
+                        
+                        output_text += f"◯{row['title']}（第{round_num}回国会参法第{num_formatted}号・{format_date(row['submitted_date'])}提出）\n"
                         output_text += f"理由：{row['reason']}\n\n"
                     
-                    # タイムゾーンを日本時間(JST)に設定
                     jst = timezone(timedelta(hours=9))
                     current_time = datetime.now(jst).strftime("%Y%m%d-%H%M%S")
                     filename = f"理由検索結果{current_time}.txt"
