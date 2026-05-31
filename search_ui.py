@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import math
 import re
+from datetime import datetime
 
 # ページ設定
 st.set_page_config(layout="wide", page_title="法案理由検索ツール")
@@ -86,7 +87,6 @@ if "total_pages" not in st.session_state: st.session_state["total_pages"] = 1
 left, right = st.columns([1, 3])
 
 with left:
-    # 検索条件入力エリア
     keywords = st.text_area("理由本文（スペース区切りでAND検索）", key="keyword_area", height=100)
     exclude_kw = st.text_input("除外キーワード", key="exclude_area")
     title_kw = st.text_input("法案名で検索（キーワード部分一致）", key="title_area")
@@ -116,7 +116,6 @@ with left:
 
     st.markdown("<p style='font-size: 0.8em; color: grey; margin-top: 1em; margin-bottom: 0.5em;'>一部にOCRによるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
 
-    # --- ページ移動ボタンを左カラムに配置 ---
     if st.session_state.get('search', False):
         st.markdown("---")
         p_col1, p_col2, p_col3 = st.columns([1, 2, 1])
@@ -192,7 +191,12 @@ with right:
                         num_full = to_full_width(int(parts[1]))
                         output_text += f"◯{row['title']}（第{parts[0]}回国会参法第{num_full}号・{format_date(row['submitted_date'])}提出）\n"
                         output_text += f"理由：{row['reason']}\n\n"
-                    st.download_button("選択した法案をテキストで保存", data=output_text, file_name="search_results.txt", mime="text/plain", use_container_width=True)
+                    
+                    # 動的なファイル名生成 (理由検索結果YYYYMMDD-HHMMSS)
+                    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    filename = f"理由検索結果{current_time}.txt"
+                    
+                    st.download_button("選択した検索結果を出力", data=output_text, file_name=filename, mime="text/plain", use_container_width=True)
 
             # ハイライトとテーブル
             def highlight_text(text, keywords, color):
@@ -204,9 +208,10 @@ with right:
             display_df["理由"] = display_df["reason"].apply(lambda x: highlight_text(x, keywords_list, "#8B0000"))
             display_df["法案名"] = display_df["title"].apply(lambda x: highlight_text(x, [title_kw_val] if title_kw_val else [], "#006400"))
 
+            # テーブルの高さを左側のボタン位置に合わせるよう調整 (500px程度)
             html = """
             <style>
-            .scroll-box { max-height: 600px; overflow-y: auto; border: 1px solid #ccc; background-color: #fcfcfc; }
+            .scroll-box { max-height: 480px; overflow-y: auto; border: 1px solid #ccc; background-color: #fcfcfc; }
             table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
             th, td { padding: 8px; border: 1px solid #ddd; word-wrap: break-word; white-space: pre-wrap; }
             th { background-color: #f0f0ff; text-align: center; position: sticky; top: 0; z-index: 10; }
@@ -228,6 +233,6 @@ with right:
                 html += f"<td><a href='{pdf_url}' target='_blank' style='color: #1f77b4; text-decoration: none;'>{row['法案名']}</a></td>"
                 html += f"<td class='justify'>{row['理由']}</td></tr>"
             html += "</tbody></table></div>"
-            components.html(html, height=605, scrolling=False)
+            components.html(html, height=485, scrolling=False)
     else:
         pass
