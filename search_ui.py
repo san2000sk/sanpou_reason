@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # ページ設定
 st.set_page_config(layout="wide", page_title="法案理由検索ツール")
@@ -192,8 +192,9 @@ with right:
                         output_text += f"◯{row['title']}（第{parts[0]}回国会参法第{num_full}号・{format_date(row['submitted_date'])}提出）\n"
                         output_text += f"理由：{row['reason']}\n\n"
                     
-                    # 動的なファイル名生成 (理由検索結果YYYYMMDD-HHMMSS)
-                    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    # タイムゾーンを日本時間(JST)に設定
+                    jst = timezone(timedelta(hours=9))
+                    current_time = datetime.now(jst).strftime("%Y%m%d-%H%M%S")
                     filename = f"理由検索結果{current_time}.txt"
                     
                     st.download_button("選択した検索結果を出力", data=output_text, file_name=filename, mime="text/plain", use_container_width=True)
@@ -208,7 +209,6 @@ with right:
             display_df["理由"] = display_df["reason"].apply(lambda x: highlight_text(x, keywords_list, "#8B0000"))
             display_df["法案名"] = display_df["title"].apply(lambda x: highlight_text(x, [title_kw_val] if title_kw_val else [], "#006400"))
 
-            # テーブルの高さを左側のボタン位置に合わせるよう調整 (500px程度)
             html = """
             <style>
             .scroll-box { max-height: 480px; overflow-y: auto; border: 1px solid #ccc; background-color: #fcfcfc; }
