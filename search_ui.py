@@ -7,32 +7,26 @@ import re
 from datetime import datetime, timedelta, timezone
 
 # ページ設定
-st.set_page_config(layout="wide", page_title="参法理由検索ツール")
+st.set_page_config(layout="wide", page_title="法案理由検索ツール")
 
 # カスタムCSS
 st.markdown("""
     <style>
-    /* 全体の余白調整 */
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 0rem;
         padding-left: 2rem;
         padding-right: 2rem;
     }
-    /* Streamlitのデフォルトヘッダーと「Manage app」ボタンを非表示 */
     [data-testid="stHeader"], footer {
         display: none !important;
     }
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     .stAppDeployButton {display:none;}
-    
-    /* ウィジェット間の隙間を詰める */
     div[data-testid="stVerticalBlock"] > div {
         gap: 0.3rem;
     }
-    
-    /* ボタンの余白を詰める */
     .stButton > button {
         margin-top: 0px;
         margin-bottom: 0px;
@@ -50,7 +44,7 @@ def load_data():
 
 data = load_data()
 
-# 数字を全角に変換する関数
+# 数字を全角に変換
 def to_full_width(n):
     s = str(n)
     trans = str.maketrans("0123456789", "０１２３４５６７８９")
@@ -67,11 +61,22 @@ def format_date(date_str):
     era_map = {"平": "平成", "令": "令和"}
     era = era_map.get(date_str[0], date_str[0])
     parts = date_str[1:].split(".")
-    # 一桁なら全角、二桁なら半角
     formatted_parts = [smart_number_format(p) for p in parts]
     if len(formatted_parts) == 3:
         return f"{era}{formatted_parts[0]}年{formatted_parts[1]}月{formatted_parts[2]}日"
     return date_str
+
+# クリアボタン用のコールバック関数
+def clear_search():
+    st.session_state["keyword_area"] = ""
+    st.session_state["exclude_area"] = ""
+    st.session_state["title_area"] = ""
+    st.session_state["use_proximity"] = False
+    st.session_state["proximity_dist_input"] = 10
+    st.session_state["search"] = False
+    st.session_state["page"] = 1
+    if "selected_labels" in st.session_state:
+        st.session_state["selected_labels"] = []
 
 # タイトルバー
 st.markdown(f"""
@@ -81,12 +86,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Session State
+# Session State 初期化
 if "keyword_area" not in st.session_state: st.session_state["keyword_area"] = ""
 if "exclude_area" not in st.session_state: st.session_state["exclude_area"] = ""
 if "title_area" not in st.session_state: st.session_state["title_area"] = ""
 if "use_proximity" not in st.session_state: st.session_state["use_proximity"] = False
-if "proximity_dist" not in st.session_state: st.session_state["proximity_dist"] = 10
 if "search" not in st.session_state: st.session_state["search"] = False
 if "page" not in st.session_state: st.session_state["page"] = 1
 if "total_pages" not in st.session_state: st.session_state["total_pages"] = 1
@@ -94,15 +98,14 @@ if "total_pages" not in st.session_state: st.session_state["total_pages"] = 1
 left, right = st.columns([1, 3])
 
 with left:
-    keywords = st.text_area("理由本文（スペース区切りでAND検索）", key="keyword_area", height=100)
-    exclude_kw = st.text_input("除外キーワード", key="exclude_area")
-    title_kw = st.text_input("法案名で検索", key="title_area")
+    st.text_area("理由本文（スペース区切りでAND検索）", key="keyword_area", height=100)
+    st.text_input("除外キーワード", key="exclude_area")
+    st.text_input("法案名で検索（キーワード部分一致）", key="title_area")
     
     st.markdown("<div style='margin-top: 0.5em;'></div>", unsafe_allow_html=True)
-    use_prox = st.checkbox("出現順序・間隔検索を利用する", key="use_proximity")
-    prox_dist = st.number_input("出現間隔入力欄", min_value=0, value=st.session_state["proximity_dist"], 
-                                disabled=not use_prox, key="proximity_dist_input")
-    if use_prox: st.session_state["proximity_dist"] = prox_dist
+    st.checkbox("順序・字数検索を利用する", key="use_proximity")
+    st.number_input("字数入力欄", min_value=0, key="proximity_dist_input", 
+                    disabled=not st.session_state["use_proximity"])
 
     st.markdown("<div style='margin-top: 0.5em;'></div>", unsafe_allow_html=True)
     col1_, col2_ = st.columns([1, 1])
@@ -111,15 +114,8 @@ with left:
             st.session_state['search'] = True
             st.session_state['page'] = 1
     with col2_:
-        if st.button("クリア", use_container_width=True):
-            st.session_state['search'] = False
-            st.session_state['page'] = 1
-            st.session_state["keyword_area"] = ""
-            st.session_state["exclude_area"] = ""
-            st.session_state["title_area"] = ""
-            st.session_state["use_proximity"] = False
-            st.session_state["proximity_dist"] = 10
-            st.rerun()
+        # コールバックを使用してリセット
+        st.button("クリア", use_container_width=True, on_click=clear_search)
 
     st.markdown("<p style='font-size: 0.8em; color: grey; margin-top: 1em; margin-bottom: 0.5em;'>一部にOCRによるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
 
@@ -141,27 +137,25 @@ with right:
     if st.session_state.get('search', False):
         df = pd.DataFrame(data)
         if not df.empty:
-            # フィルタリング
-            keywords_list = st.session_state.get("keyword_area", "").strip().split()
-            exclude_list = st.session_state.get("exclude_area", "").strip().split()
+            keywords_list = st.session_state["keyword_area"].strip().split()
+            exclude_list = st.session_state["exclude_area"].strip().split()
             for ex in exclude_list:
                 df = df[~df["reason"].str.contains(ex, case=False, na=False)]
             if keywords_list:
-                if st.session_state.get("use_proximity", False):
-                    dist = st.session_state.get("proximity_dist", 10)
+                if st.session_state["use_proximity"]:
+                    dist = st.session_state["proximity_dist_input"]
                     pattern_str = (r".{0," + str(dist) + r"}").join([re.escape(kw) for kw in keywords_list])
                     df = df[df["reason"].str.contains(pattern_str, case=False, na=False, regex=True)]
                 else:
                     for kw in keywords_list:
                         df = df[df["reason"].str.contains(kw, case=False, na=False)]
-            title_kw_val = st.session_state.get("title_area", "")
+            title_kw_val = st.session_state["title_area"]
             if title_kw_val:
                 df = df[df["title"].str.contains(title_kw_val, case=False, na=False)]
 
             result_count = len(df)
             st.markdown(f"<b>該当件数：{result_count} 件</b>", unsafe_allow_html=True)
 
-            # ページング
             display_count = 20
             st.session_state["total_pages"] = math.ceil(result_count / display_count) if result_count > 0 else 1
             page = max(1, min(st.session_state.get("page", 1), st.session_state["total_pages"]))
@@ -170,7 +164,6 @@ with right:
             end = start + display_count
             display_df = df.iloc[start:end].copy().reset_index(drop=True)
 
-            # 書き出し用マルチセレクト
             options = []
             id_to_row = {}
             for idx, row in df.iterrows():
@@ -190,26 +183,20 @@ with right:
                     if add_conditions:
                         kw_str = st.session_state["keyword_area"] if st.session_state["keyword_area"] else "なし"
                         ex_str = st.session_state["exclude_area"] if st.session_state["exclude_area"] else "なし"
-                        prox_str = f"出現順指定あり・間隔{st.session_state['proximity_dist']}文字以内" if st.session_state["use_proximity"] else "出現順指定なし"
+                        prox_str = f"出現順指定あり・間隔{st.session_state['proximity_dist_input']}文字以内" if st.session_state["use_proximity"] else "出現順指定なし"
                         output_text += f"〈検索条件〉\n　検索キーワード：{kw_str}　除外キーワード：{ex_str}　{prox_str}\n\n"
                     for label in selected_labels:
                         row = id_to_row[label]
                         parts = row['filename'].replace(".pdf", "").split("-")
-                        round_num = parts[0]
-                        num_raw = str(int(parts[1]))
-                        # 提出番号も「一桁なら全角、二桁なら半角」
-                        num_formatted = smart_number_format(num_raw)
-                        
-                        output_text += f"◯{row['title']}（第{round_num}回国会参法第{num_formatted}号・{format_date(row['submitted_date'])}提出）\n"
+                        num_formatted = smart_number_format(str(int(parts[1])))
+                        output_text += f"◯{row['title']}（第{parts[0]}回国会参法第{num_formatted}号・{format_date(row['submitted_date'])}提出）\n"
                         output_text += f"理由：{row['reason']}\n\n"
                     
                     jst = timezone(timedelta(hours=9))
                     current_time = datetime.now(jst).strftime("%Y%m%d-%H%M%S")
                     filename = f"理由検索結果{current_time}.txt"
-                    
                     st.download_button("選択した検索結果を出力", data=output_text, file_name=filename, mime="text/plain", use_container_width=True)
 
-            # ハイライトとテーブル
             def highlight_text(text, keywords, color):
                 if not keywords: return text
                 for kw in keywords:
