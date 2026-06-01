@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 # ページ設定
-st.set_page_config(layout="wide", page_title="法案理由検索ツール")
+st.set_page_config(layout="wide", page_title="参法理由検索ツール")
 
 # カスタムCSS
 st.markdown("""
@@ -78,6 +78,10 @@ def clear_search():
     if "selected_labels" in st.session_state:
         st.session_state["selected_labels"] = []
 
+# すべて選択用のコールバック関数
+def select_all_results(all_options):
+    st.session_state["selected_labels"] = all_options
+
 # タイトルバー
 st.markdown(f"""
 <div style='display: flex; justify-content: space-between; align-items: center; background-color:#6a5acd; padding: 0.4em 1em; border-radius: 4px; margin-bottom: 0.8em;'>
@@ -94,17 +98,18 @@ if "use_proximity" not in st.session_state: st.session_state["use_proximity"] = 
 if "search" not in st.session_state: st.session_state["search"] = False
 if "page" not in st.session_state: st.session_state["page"] = 1
 if "total_pages" not in st.session_state: st.session_state["total_pages"] = 1
+if "selected_labels" not in st.session_state: st.session_state["selected_labels"] = []
 
 left, right = st.columns([1, 3])
 
 with left:
     st.text_area("理由本文（スペース区切りでAND検索）", key="keyword_area", height=100)
     st.text_input("除外キーワード", key="exclude_area")
-    st.text_input("法案名で検索（キーワード部分一致）", key="title_area")
+    st.text_input("法案名で検索", key="title_area")
     
     st.markdown("<div style='margin-top: 0.5em;'></div>", unsafe_allow_html=True)
-    st.checkbox("順序・字数検索を利用する", key="use_proximity")
-    st.number_input("字数入力欄", min_value=0, key="proximity_dist_input", 
+    st.checkbox("語間・語順検索を利用する", key="use_proximity")
+    st.number_input("語間入力欄", min_value=0, key="proximity_dist_input", 
                     disabled=not st.session_state["use_proximity"])
 
     st.markdown("<div style='margin-top: 0.5em;'></div>", unsafe_allow_html=True)
@@ -114,10 +119,10 @@ with left:
             st.session_state['search'] = True
             st.session_state['page'] = 1
     with col2_:
-        # コールバックを使用してリセット
         st.button("クリア", use_container_width=True, on_click=clear_search)
 
-    st.markdown("<p style='font-size: 0.8em; color: grey; margin-top: 1em; margin-bottom: 0.5em;'>一部にOCRによるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 0.8em; color: grey; margin-top: 1em; margin-bottom: 0.2em;'>※一部にOCRによるものも含まれており、内容の正確性は保証いたしかねます。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 0.8em; color: grey; margin-bottom: 0.5em;'>※エラーが出た場合ページを再読込してみてください</p>", unsafe_allow_html=True)
 
     if st.session_state.get('search', False):
         st.markdown("---")
@@ -164,17 +169,24 @@ with right:
             end = start + display_count
             display_df = df.iloc[start:end].copy().reset_index(drop=True)
 
-            options = []
+            # 書き出し用オプションの作成
+            all_options = []
             id_to_row = {}
             for idx, row in df.iterrows():
                 parts = row['filename'].replace(".pdf", "").split("-")
                 label = f"[{parts[0]}-{int(parts[1])}] {row['title']}"
-                options.append(label)
+                all_options.append(label)
                 id_to_row[label] = row
 
-            selected_labels = st.multiselect("出力する法案を選択してください（複数選択可）", options=options, key="selected_labels")
+            # マルチセレクトと「すべて選択」ボタン
+            col_sel1, col_sel2 = st.columns([4, 1])
+            with col_sel1:
+                st.multiselect("出力する法案を選択してください（複数選択可）", options=all_options, key="selected_labels")
+            with col_sel2:
+                st.markdown("<div style='margin-top: 24px;'></div>", unsafe_allow_html=True)
+                st.button("すべて選択", use_container_width=True, on_click=select_all_results, args=(all_options,))
             
-            if selected_labels:
+            if st.session_state["selected_labels"]:
                 col_dl1, col_dl2 = st.columns([1, 1])
                 with col_dl1:
                     add_conditions = st.checkbox("検索条件を冒頭に記載する", value=True)
@@ -185,7 +197,7 @@ with right:
                         ex_str = st.session_state["exclude_area"] if st.session_state["exclude_area"] else "なし"
                         prox_str = f"出現順指定あり・間隔{st.session_state['proximity_dist_input']}文字以内" if st.session_state["use_proximity"] else "出現順指定なし"
                         output_text += f"〈検索条件〉\n　検索キーワード：{kw_str}　除外キーワード：{ex_str}　{prox_str}\n\n"
-                    for label in selected_labels:
+                    for label in st.session_state["selected_labels"]:
                         row = id_to_row[label]
                         parts = row['filename'].replace(".pdf", "").split("-")
                         num_formatted = smart_number_format(str(int(parts[1])))
@@ -206,12 +218,13 @@ with right:
             display_df["理由"] = display_df["reason"].apply(lambda x: highlight_text(x, keywords_list, "#8B0000"))
             display_df["法案名"] = display_df["title"].apply(lambda x: highlight_text(x, [title_kw_val] if title_kw_val else [], "#006400"))
 
+            # テーブル下端の罫線修正: 最後の行の後にボーダーが残るように調整
             html = """
             <style>
             .scroll-box { max-height: 480px; overflow-y: auto; border: 1px solid #ccc; background-color: #fcfcfc; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; border-bottom: 1px solid #ddd; }
             th, td { padding: 8px; border: 1px solid #ddd; word-wrap: break-word; white-space: pre-wrap; }
-            th { background-color: #f0f0ff; text-align: center; position: sticky; top: 0; z-index: 10; }
+            th { background-color: #f0f0ff; text-align: center; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #ddd; }
             td.centered { text-align: center; vertical-align: middle; }
             td.justify { text-align: justify; vertical-align: top; }
             col.round { width: 10%; } col.num { width: 7%; } col.date { width: 12%; } col.title { width: 26%; } col.reason { width: 45%; }
